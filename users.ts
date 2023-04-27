@@ -366,6 +366,71 @@ function cropImage(
   }
 }
 
+/**
+ * Fetches the required statistics about this user's
+ * use of UNSW Memes.
+ * 
+ * Returns 403 Error when any of:
+ * - token is invalid
+ * 
+ * @returns {{}} - no error
+ * @throws { HTTPError } - error
+ */
+function userStatsV1(token: string): { userStats: UserStats } {
+  const user: User = getUserByToken(token);
+  if (!user) {
+    throw HTTPError(403, 'Invalid token');
+  }
+
+  const data: Data = getData();
+  user.timeStamp = Date.now() / 1000;
+  const channelsJoined: { numChannelsJoined: number; timeStamp: number }[] = [{ numChannelsJoined: 0, timeStamp: user.timeStamp }];
+  const dmsJoined: { numDmsJoined: number, timeStamp: number }[] = [{ numDmsJoined: 0, timeStamp: user.timeStamp }];
+  const messagesSent: { numMessagesSent: number, timeStamp: number }[] = [{ numMessagesSent: 0, timeStamp: user.timeStamp }];
+  
+  let numChannelsJoined = 0;
+  let numDmsJoined = 0;
+  let numMsgsSent = 0;
+  let numChannels = data.channels.length;
+  let numDms = data.dms.length;
+  let numMsgs = 0;
+
+  
+  data.channels.forEach((channel) => {
+    if (channel.members.some((member) => member.uId === user.uId)) {
+      numChannels--;
+      if (channel.timeStamp <= user.timeStamp) {
+        numChannelsJoined++;
+        channelsJoined.push({ numChannelsJoined, timeStamp: channel.timeStamp });
+      }
+    }
+  });
+
+  data.dms.forEach((dm) => {
+    if (dm.dmMembers.some((member) => member.uId === user.uId)) {
+      numDms--;
+      if (dm.timeStamp <= user.timeStamp) {
+        numDmsJoined++;
+        dmsJoined.push({ numDmsJoined, timeStamp: dm.timeStamp });
+      }
+    }
+  });
+
+  data.messages.forEach((message) => {
+    if (message.uId === user.uId) {
+      numMsgs++;
+      numMsgsSent++;
+      messagesSent.push({ numMessagesSent: numMsgsSent, timeStamp: message.timeSent });
+    }
+  });
+
+  const denominator = numChannels + numDms + numMsgs;
+  const involvementRate = denominator !== 0 ? Math.min(numChannelsJoined + numDmsJoined + numMsgs) / denominator : 0;
+  const userStats: UserStats = {channelsJoined, dmsJoined, messagesSent, involvementRate};
+
+  return {userStats};
+}
+
 export {
   userProfileV3,
   usersAllV2,
@@ -373,4 +438,5 @@ export {
   userProfileSetEmailV2,
   userProfileSetHandleV2,
   userProfileUploadPhotoV1,
+  userStats
 };
