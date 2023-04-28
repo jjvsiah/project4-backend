@@ -383,10 +383,9 @@ function userStatsV1(token: string): { userStats: UserStats } {
   }
 
   const data: Data = getData();
-  user.timeStamp = Date.now() / 1000;
-  const channelsJoined: { numChannelsJoined: number; timeStamp: number }[] = [{ numChannelsJoined: 0, timeStamp: user.timeStamp }];
-  const dmsJoined: { numDmsJoined: number, timeStamp: number }[] = [{ numDmsJoined: 0, timeStamp: user.timeStamp }];
-  const messagesSent: { numMessagesSent: number, timeStamp: number }[] = [{ numMessagesSent: 0, timeStamp: user.timeStamp }];
+  const channelsJoined: { numChannelsJoined: number; timeStamp: number }[] = [{ numChannelsJoined: 0, timeStamp: user.accountCreationTime }];
+  const dmsJoined: { numDmsJoined: number, timeStamp: number }[] = [{ numDmsJoined: 0, timeStamp: user.accountCreationTime }];
+  const messagesSent: { numMessagesSent: number, timeStamp: number }[] = [{ numMessagesSent: 0, timeStamp: user.accountCreationTime }];
   
   let numChannelsJoined = 0;
   let numDmsJoined = 0;
@@ -398,23 +397,18 @@ function userStatsV1(token: string): { userStats: UserStats } {
   
   data.channels.forEach((channel) => {
     if (channel.members.some((member) => member.uId === user.uId)) {
-      numChannels--;
-      if (channel.timeStamp <= user.timeStamp) {
-        numChannelsJoined++;
-        channelsJoined.push({ numChannelsJoined, timeStamp: channel.timeStamp });
+      numChannelsJoined++;
+      channelsJoined.push({ numChannelsJoined, timeStamp: channel.timeStamp });
       }
-    }
-  });
+    });
+
 
   data.dms.forEach((dm) => {
     if (dm.dmMembers.some((member) => member.uId === user.uId)) {
-      numDms--;
-      if (dm.timeStamp <= user.timeStamp) {
         numDmsJoined++;
         dmsJoined.push({ numDmsJoined, timeStamp: dm.timeStamp });
       }
-    }
-  });
+    });
 
   data.messages.forEach((message) => {
     if (message.uId === user.uId) {
@@ -431,6 +425,71 @@ function userStatsV1(token: string): { userStats: UserStats } {
   return {userStats};
 }
 
+/**
+ * Fetches the required statistics about the workspace's use of UNSW Memes.
+ * 
+ * Returns 403 Error when any of:
+ * - token is invalid
+ * 
+ * @returns {{}} - no error
+ * @throws { HTTPError } - error
+ */
+function userStatsV2(token: string): { workspaceStats: WorkspaceStats } {
+  const user: User = getUserByToken(token);
+  if (!user) {
+    throw HTTPError(403, 'Invalid token');
+  }
+
+  const data: Data = getData();
+  const channelsExist: { numChannelsExist: number; timeStamp: number}[] = [{ numChannelsExist: data.channels.length, timeStamp: data.users[0].accountCreationTime }];
+  const dmsExist: {numDmsExist: number, timeStamp: number}[] = [{ numDmsExist: data.dms.length, timeStamp: data.users[0].accountCreationTime }];
+  const messagesExist: { numMessagesExist: number, timeStamp: number}[] = [{ numMessagesExist: 0, timeStamp: data.users[0].accountCreationTime }];
+
+  // numMsgs is the number of messages that exist at the current time, 
+  // and should decrease when messages are removed, or when dmRemove is called. 
+  // Messages which have not been sent yet with messageSendlater or messageSendlaterdm are not included, 
+  // and standupSend messages only count when the final packaged standup message from standup/start has been sent
+  let numMsgs = 0;
+
+  data.messages.forEach((message) => {
+    // Check if message has been sent and is not scheduled for later
+    if (message.timeSent && !message.scheduledSendTime) {
+      // Check if message has not been deleted and is from the user
+      if (!message.deleted && message.uId === user.uId) {
+        numMsgs++;
+      }
+
+      // Check if message is a standup message and has been sent
+      if (message.isStandup && message.finalMessageSent) {
+        numMsgs++;
+      }
+    }
+  });
+
+  messagesExist.push({ numMessagesExist: numMsgs, timeStamp: Date.now() });
+
+  const numChannels = data.channels.length;
+  let numDms = data.dms.length;
+  const numUsers = data.users.length;
+
+  // Decrement numDms when a DM is removed
+  const dmRemove = (dmId: string) => {
+    const index = data.dms.findIndex(dm => dm.id === dmId);
+    if (index !== -1) {
+      data.dms.splice(index, 1);
+      numDms--;
+    }
+  };
+
+  const numUsersWhoHaveJoinedAtLeastOneChannelOrDm = userStatsV1(token).userStats.involvementRate * numUsers;
+  const utilizationRate = numUsersWhoHaveJoinedAtLeastOneChannelOrDm / numUsers;
+  
+  const workspaceStats: WorkspaceStats = {channelsExist, dmsExist, messagesExist, utilizationRate};
+
+  return {workspaceStats};
+}
+
+
 export {
   userProfileV3,
   usersAllV2,
@@ -438,5 +497,6 @@ export {
   userProfileSetEmailV2,
   userProfileSetHandleV2,
   userProfileUploadPhotoV1,
-  userStats
+  userStatsV1,
+  userStatsV2
 };
