@@ -120,6 +120,7 @@ function authRegisterV3(
     permissionId,
     notifications: [],
     profileImgUrl: defaultImgUrl,
+    accountCreationTime: Date.now() / 1000
   };
 
   data.users.push(newUser);
