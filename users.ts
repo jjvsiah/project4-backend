@@ -434,16 +434,16 @@ function userStatsV1(token: string): { userStats: UserStats } {
  * @returns {{}} - no error
  * @throws { HTTPError } - error
  */
-function userStatsV2(token: string): { workspaceStats: WorkspaceStats } {
+function usersStatsV1(token: string): { workspaceStats: WorkspaceStats } {
   const user: User = getUserByToken(token);
   if (!user) {
     throw HTTPError(403, 'Invalid token');
   }
 
   const data: Data = getData();
-  const channelsExist: { numChannelsExist: number; timeStamp: number}[] = [{ numChannelsExist: data.channels.length, timeStamp: data.users[0].accountCreationTime }];
-  const dmsExist: {numDmsExist: number, timeStamp: number}[] = [{ numDmsExist: data.dms.length, timeStamp: data.users[0].accountCreationTime }];
-  const messagesExist: { numMessagesExist: number, timeStamp: number}[] = [{ numMessagesExist: 0, timeStamp: data.users[0].accountCreationTime }];
+  const channelsExist: { numChannelsExist: number; timeStamp: number}[] = [{ numChannelsExist: data.channels.length, timeStamp: Date.now () / 1000 }];
+  const dmsExist: {numDmsExist: number, timeStamp: number}[] = [{ numDmsExist: data.dms.length, timeStamp: Date.now () / 1000 }];
+  const messagesExist: { numMessagesExist: number, timeStamp: number}[] = [{ numMessagesExist: 0, timeStamp: Date.now () / 1000 }];
 
   // numMsgs is the number of messages that exist at the current time, 
   // and should decrease when messages are removed, or when dmRemove is called. 
@@ -454,10 +454,6 @@ function userStatsV2(token: string): { workspaceStats: WorkspaceStats } {
   data.messages.forEach((message) => {
     // Check if message has been sent and is not scheduled for later
     if (message.timeSent && !message.scheduledSendTime) {
-      // Check if message has not been deleted and is from the user
-      if (!message.deleted && message.uId === user.uId) {
-        numMsgs++;
-      }
 
       // Check if message is a standup message and has been sent
       if (message.isStandup && message.finalMessageSent) {
@@ -468,6 +464,7 @@ function userStatsV2(token: string): { workspaceStats: WorkspaceStats } {
 
   messagesExist.push({ numMessagesExist: numMsgs, timeStamp: Date.now() });
 
+// numChannels will never decrease as there is no way to remove channels, and numDms will only decrease when dm/remove is called.
   const numChannels = data.channels.length;
   let numDms = data.dms.length;
   const numUsers = data.users.length;
@@ -498,5 +495,5 @@ export {
   userProfileSetHandleV2,
   userProfileUploadPhotoV1,
   userStatsV1,
-  userStatsV2
+  usersStatsV1
 };
